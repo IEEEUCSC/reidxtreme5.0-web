@@ -24,6 +24,7 @@ function readMember(raw: unknown): Member {
     ...blankMember(),
     name: str(input.name),
     year: str(input.year),
+    email: str(input.email),
     whatsapp: str(input.whatsapp),
     registrationNumber: str(input.registrationNumber),
     ieeeMembership: str(input.ieeeMembership),

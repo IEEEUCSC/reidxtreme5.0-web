@@ -2,6 +2,7 @@
 
 ```
 Browser form ──POST /api/register──▶ Next.js route (validates) ──POST + secret──▶ Apps Script web app ──▶ Google Sheet
+                                                                                           └──▶ welcome email to the team leader
 ```
 
 The browser never sees the Apps Script URL or the secret. They live only in the
@@ -11,18 +12,23 @@ server's environment variables.
 
 You don't need to type these yourself. The script creates the `Registrations` tab
 and its header row on the first submission, or when you run `setup()`. There is
-one row per team and 24 columns:
+one row per team and 22 columns:
 
 | # | Column | Notes |
 |---|--------|-------|
 | A | Timestamp | `yyyy-MM-dd HH:mm:ss`, Asia/Colombo |
 | B | Team ID | `RX5-001`, `RX5-002`, … |
 | C | Team Name | unique (case-insensitive) |
-| D | Team Size | 1–4 |
-| E–I | Leader Name, Leader Year, Leader WhatsApp, Leader Reg No, Leader IEEE No | |
-| J–N | Member 2 Name, Year, WhatsApp, Reg No, IEEE No | blank if team size < 2 |
-| O–S | Member 3 … | blank if team size < 3 |
-| T–X | Member 4 … | blank if team size < 4 |
+| D | Team Size | 2–3 |
+| E–J | Leader Name, Leader Year, Leader Email, Leader WhatsApp, Leader Reg No, Leader IEEE No | |
+| K–P | Member 2 Name, Year, Email, WhatsApp, Reg No, IEEE No | |
+| Q–V | Member 3 … | blank if team size < 3 |
+
+> **Upgrading a sheet made before emails were collected:** paste the new script,
+> choose `migrateAddEmailColumns` in the function dropdown and click **Run**. It
+> inserts an Email column after each Year column (existing rows stay blank there)
+> and is safe to run twice. Until it runs, the web app refuses submissions rather
+> than writing into the wrong columns.
 
 Every cell is stored as plain text, so leading zeros in phone numbers are kept and
 values starting with `=` or `+` are never run as formulas.
@@ -31,6 +37,7 @@ Field formats (checked in the form, the API route and `lib/registration.ts`):
 
 | Field | Format | Example |
 |-------|--------|---------|
+| Email | `name@domain.tld`; stored lowercased | `Kasun@Gmail.com` → `kasun@gmail.com` |
 | WhatsApp | exactly 10 digits, starting with 0 | `0771234567` |
 | Registration number | letters, digits and `/`; stored uppercased; unique across all teams | `2022cs001` → `2022CS001` |
 | IEEE membership number | optional, 6–12 digits | `101597523` |
@@ -49,6 +56,9 @@ Field formats (checked in the form, the API route and `lib/registration.ts`):
 5. *(Optional)* Choose `setup` in the function dropdown and click **Run**. This
    creates the header row now. The first time, Google asks you to authorize the
    script: **Review permissions → choose account → Advanced → Go to (project) → Allow**.
+   It asks for Sheets, and Gmail (send) access.
+6. *(Optional)* Run `sendTestWelcomeEmail` to send the welcome email to your
+   own address and check how it looks.
 
 ## 3. Deploy as a web app
 
@@ -85,7 +95,8 @@ so after changing `REGISTRATIONS_OPEN` you have to **redeploy** (or restart
 ## 5. Test it
 
 1. Run `pnpm dev`, open `/register`, and submit a test team.
-2. A new row should appear in the sheet, and the form should show the Team ID.
+2. A new row should appear in the sheet, the form should show the Team ID, and the
+   leader's address should receive the welcome email.
 3. Submit the same team name again. You should see *"That team name is already taken."*
 4. Delete the test rows before you announce registrations.
 
@@ -96,6 +107,8 @@ so after changing `REGISTRATIONS_OPEN` you have to **redeploy** (or restart
 | "Registrations are not configured yet." | `GOOGLE_SCRIPT_URL` / `GOOGLE_SCRIPT_SECRET` are missing in the server environment |
 | "Unauthorized." | `GOOGLE_SCRIPT_SECRET` doesn't match the `SECRET` script property |
 | "Could not save your registration." | The script crashed or the URL is wrong. Check **Apps Script → Executions** for the error. A common cause is that access isn't set to *Anyone* |
+| "Registrations are being updated." | The sheet's header row doesn't match the script. Run `migrateAddEmailColumns` |
+| Team saved but no welcome email | Check **Executions** for the mail error. Free Gmail accounts can send about 100 emails a day from Apps Script (Workspace: 1,500) |
 | Code changes have no effect | You didn't publish a new version of the deployment (see the note in step 3) |
 
 Team IDs come from the row number. If you delete rows in the middle of the sheet,

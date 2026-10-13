@@ -8,6 +8,7 @@ export const YEARS = ["1", "2", "3", "4"] as const;
 export type Member = {
   name: string;
   year: string;
+  email: string;
   whatsapp: string;
   registrationNumber: string;
   // Optional; empty string when the member has none.
@@ -24,11 +25,14 @@ export type RegistrationSubmission = {
 export const blankMember = (): Member => ({
   name: "",
   year: "",
+  email: "",
   whatsapp: "",
   registrationNumber: "",
   ieeeMembership: "",
 });
 
+// Deliberately loose: something@something.tld, no spaces.
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Local format only: 10 digits starting with 0, e.g. 0771234567.
 export const WHATSAPP_PATTERN = /^0\d{9}$/;
 // Letters, digits and slashes, e.g. 2022cs001 or EG/2022/1234.
@@ -41,6 +45,8 @@ export const IEEE_PATTERN = /^\d{6,12}$/;
 export function memberError(member: Member): string | null {
   if (!member.name.trim()) return "Enter a full name.";
   if (!YEARS.includes(member.year as (typeof YEARS)[number])) return "Choose a year of study.";
+  if (!EMAIL_PATTERN.test(member.email.trim()))
+    return "Enter a valid email address, like name@example.com.";
   if (!WHATSAPP_PATTERN.test(member.whatsapp))
     return "WhatsApp number must be 10 digits, like 0771234567.";
   if (!REG_NUMBER_PATTERN.test(member.registrationNumber.trim()))
@@ -75,6 +81,7 @@ function cleanMember(raw: unknown, who: string): Member {
   const member: Member = {
     name: text(input.name, 100),
     year: text(input.year, 1),
+    email: text(input.email, 254).toLowerCase(),
     whatsapp: text(input.whatsapp, 20),
     registrationNumber: normalizeRegNumber(text(input.registrationNumber, 40)),
     ieeeMembership: text(input.ieeeMembership, 20),

@@ -143,10 +143,11 @@ const TEAM_SIZE_OPTIONS = Array.from(
 type MemberFieldsProps = {
   fieldId: string;
   member: Member;
+  emailHint?: string;
   onChange: (field: keyof Member, value: string) => void;
 };
 
-function MemberFields({ fieldId, member, onChange }: MemberFieldsProps) {
+function MemberFields({ fieldId, member, emailHint, onChange }: MemberFieldsProps) {
   return (
     <div className="grid min-w-0 gap-[1.35rem]">
       <div className={FIELD}>
@@ -180,6 +181,31 @@ function MemberFields({ fieldId, member, onChange }: MemberFieldsProps) {
           required
           value={member.year}
         />
+      </div>
+
+      <div className={FIELD}>
+        <label className={FIELD_LABEL} htmlFor={`${fieldId}-email`}>
+          Email address
+        </label>
+        <input
+          aria-describedby={emailHint ? `${fieldId}-email-hint` : undefined}
+          autoCapitalize="none"
+          autoComplete="off"
+          className={CONTROL}
+          id={`${fieldId}-email`}
+          maxLength={254}
+          onChange={(event) => onChange("email", event.target.value.trim())}
+          placeholder="name@example.com"
+          required
+          spellCheck={false}
+          type="email"
+          value={member.email}
+        />
+        {emailHint && (
+          <span className={FIELD_HINT} id={`${fieldId}-email-hint`}>
+            {emailHint}
+          </span>
+        )}
       </div>
 
       <div className={FIELD}>
@@ -442,8 +468,8 @@ function RegistrationLayout({ headingId, isOpen, aside, panel }: RegistrationLay
             Register <span className="text-mint text-glow">now!</span>
           </h2>
           <p className="m-0 text-[clamp(0.875rem,1.5vw,1rem)] leading-relaxed text-muted">
-            Teams of up to {MAX_TEAM_SIZE}, leader included. Have everyone&apos;s registration
-            and WhatsApp numbers ready. It takes about five minutes.
+            Teams of up to {MAX_TEAM_SIZE}, leader included. Have everyone&apos;s email,
+            registration and WhatsApp numbers ready. It takes about five minutes.
           </p>
         </header>
         {isOpen && aside}
@@ -539,6 +565,7 @@ function ReviewCard({ title, rows, error, onEdit }: ReviewCardProps) {
 const memberRows = (member: Member): ReviewRow[] => [
   { label: "Full name", value: member.name },
   { label: "Year of study", value: member.year ? `Year ${member.year}` : "" },
+  { label: "Email", value: member.email },
   { label: "WhatsApp", value: member.whatsapp },
   { label: "Registration no.", value: member.registrationNumber },
   { label: "IEEE membership no.", value: member.ieeeMembership },
@@ -798,6 +825,7 @@ function RegistrationWizard({ isOpen, headingId }: RegistrationFormProps & { hea
     subtitle = "The leader is our main point of contact for the team.";
     content = (
       <MemberFields
+        emailHint="We'll send the confirmation email here."
         fieldId={`${id}-leader`}
         member={leader}
         onChange={(field, value) => {
