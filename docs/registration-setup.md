@@ -1,0 +1,96 @@
+# Team registration → Google Sheet setup
+
+```
+Browser form ──POST /api/register──▶ Next.js route (validates) ──POST + secret──▶ Apps Script web app ──▶ Google Sheet
+```
+
+The browser never sees the Apps Script URL or the secret. They live only in the
+server's environment variables.
+
+## 1. Sheet columns
+
+You don't need to type these yourself. The script creates the `Registrations` tab
+and its header row on the first submission, or when you run `setup()`. There is
+one row per team and 24 columns:
+
+| # | Column | Notes |
+|---|--------|-------|
+| A | Timestamp | `yyyy-MM-dd HH:mm:ss`, Asia/Colombo |
+| B | Team ID | `RX5-001`, `RX5-002`, … |
+| C | Team Name | unique (case-insensitive) |
+| D | Team Size | 1–4 |
+| E–I | Leader Name, Leader Year, Leader WhatsApp, Leader Reg No, Leader IEEE No | |
+| J–N | Member 2 Name, Year, WhatsApp, Reg No, IEEE No | blank if team size < 2 |
+| O–S | Member 3 … | blank if team size < 3 |
+| T–X | Member 4 … | blank if team size < 4 |
+
+Every cell is stored as plain text, so leading zeros in phone numbers are kept and
+values starting with `=` or `+` are never run as formulas. Registration numbers are
+uppercased, and a registration number can appear in only one team.
+
+## 2. Create the sheet and script
+
+1. Create a new Google Sheet, e.g. **ReidXtreme 5.0 Registrations**, using the
+   organizing committee's Google account.
+2. Open **Extensions → Apps Script**.
+3. Replace the contents of `Code.gs` with [`scripts/registration-sheet.gs`](../scripts/registration-sheet.gs)
+   and save.
+4. Set the shared secret:
+   - Generate one: `openssl rand -hex 32`
+   - In Apps Script open **Project Settings (⚙) → Script Properties → Add script property**
+   - Property: `SECRET`, Value: the generated string
+5. *(Optional)* Choose `setup` in the function dropdown and click **Run**. This
+   creates the header row now. The first time, Google asks you to authorize the
+   script: **Review permissions → choose account → Advanced → Go to (project) → Allow**.
+
+## 3. Deploy as a web app
+
+1. **Deploy → New deployment**, then click the gear icon and choose **Web app**.
+2. Settings:
+   - **Execute as:** *Me*. The script writes to the sheet as you.
+   - **Who has access:** *Anyone*. Your Next.js server calls it without a Google
+     login. The `SECRET` stops anyone else from writing to the sheet.
+3. Click **Deploy** and copy the **Web app URL**
+   (`https://script.google.com/macros/s/…/exec`).
+
+> **Changing the script later:** saving the code does not update the live URL. Use
+> **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. This
+> keeps the same URL. "New deployment" would create a different URL.
+
+## 4. Environment variables
+
+Add these to `.env.local` for local development and to your hosting provider
+(e.g. Vercel → Project → Settings → Environment Variables) for production:
+
+```bash
+# Apps Script web app URL from step 3
+GOOGLE_SCRIPT_URL=https://script.google.com/macros/s/XXXXXXXX/exec
+# Must exactly match the SECRET script property from step 2
+GOOGLE_SCRIPT_SECRET=paste-the-openssl-output-here
+# "true" opens the form and the API. Anything else shows "Coming soon" and rejects submissions.
+REGISTRATIONS_OPEN=true
+```
+
+All three are server-only (no `NEXT_PUBLIC_` prefix). `/register` is a static page,
+so after changing `REGISTRATIONS_OPEN` you have to **redeploy** (or restart
+`next dev`) for the overlay to change.
+
+## 5. Test it
+
+1. Run `pnpm dev`, open `/register`, and submit a test team.
+2. A new row should appear in the sheet, and the form should show the Team ID.
+3. Submit the same team name again. You should see *"That team name is already taken."*
+4. Delete the test rows before you announce registrations.
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---------|-------|
+| "Registrations are not configured yet." | `GOOGLE_SCRIPT_URL` / `GOOGLE_SCRIPT_SECRET` are missing in the server environment |
+| "Unauthorized." | `GOOGLE_SCRIPT_SECRET` doesn't match the `SECRET` script property |
+| "Could not save your registration." | The script crashed or the URL is wrong. Check **Apps Script → Executions** for the error. A common cause is that access isn't set to *Anyone* |
+| Code changes have no effect | You didn't publish a new version of the deployment (see the note in step 3) |
+
+Team IDs come from the row number. If you delete rows in the middle of the sheet,
+later IDs can repeat an earlier one, so clear only test rows, and only before
+registrations open.

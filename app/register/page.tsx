@@ -14,7 +14,7 @@ export default function RegisterPage() {
       <main className="w-full">
         {/* The body already draws the grid; this adds only the glow from above. */}
         <div className="grid min-h-screen pt-[clamp(6rem,15vh,10rem)] pb-16 [place-items:safe_center] p-3 sm:p-[clamp(1rem,5vw,3rem)]">
-          <RegistrationForm />
+          <RegistrationForm isOpen={process.env.REGISTRATIONS_OPEN === "true"} />
         </div>
       </main>
       <div className="px-4 pt-4 md:px-[clamp(1rem,5vw,4.5rem)] md:pt-[clamp(1rem,5vw,4.5rem)]">

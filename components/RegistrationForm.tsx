@@ -2,35 +2,33 @@
 
 import { useId, useState, type FormEvent } from "react";
 import CustomSelect from "@/components/CustomSelect";
+import RegistrationDialog, { type RegistrationResult } from "@/components/RegistrationDialog";
 import { SectionHeader } from "@/components/SectionHeader";
 import { cx } from "@/lib/cx";
+import {
+  MAX_TEAM_SIZE,
+  MIN_TEAM_SIZE,
+  YEARS,
+  blankMember,
+  type Member,
+  type RegistrationSubmission,
+} from "@/lib/registration";
 import { motion } from "motion/react";
 
-const YEARS = [
-  { label: "Year 1", value: "1" },
-  { label: "Year 2", value: "2" },
-  { label: "Year 3", value: "3" },
-  { label: "Year 4", value: "4" },
-] as const;
+const YEAR_OPTIONS = YEARS.map((year) => ({ label: `Year ${year}`, value: year }));
 
-type Member = {
-  name: string;
-  email: string;
-  year: string;
-  registrationNumber: string;
-};
-
-export type RegistrationSubmission = {
-  teamName: string;
-  teamLead: Member;
-  members: Member[];
-};
+const TEAM_SIZE_OPTIONS = Array.from(
+  { length: MAX_TEAM_SIZE - MIN_TEAM_SIZE + 1 },
+  (_, index) => {
+    const size = MIN_TEAM_SIZE + index;
+    return { label: `${size} member${size === 1 ? "" : "s"}`, value: String(size) };
+  },
+);
 
 type RegistrationFormProps = {
-  onSubmit?: (submission: RegistrationSubmission) => void | Promise<void>;
+  // When false, the form is shown greyed out behind a "coming soon" overlay.
+  isOpen: boolean;
 };
-
-const blankMember = (): Member => ({ name: "", email: "", year: "", registrationNumber: "" });
 
 // Form building blocks, styled after DESIGN.md §25.
 const FIELD = "grid min-w-0 gap-[0.45rem]";
@@ -43,8 +41,6 @@ const GROUP = "m-0 grid min-w-0 gap-[0.8rem] border-0 p-0 after:clear-both after
 const LEGEND = `${LABEL} float-left mb-[0.8rem] w-full`;
 const CARD = "grid min-w-0 gap-[0.7rem] rounded-md border border-emerald/28 bg-bg/42 p-[0.85rem]";
 const CARD_HEADING = "m-0 font-display text-[0.9rem] font-semibold tracking-[0.1em] text-mint";
-const SMALL_BUTTON =
-  "w-fit cursor-pointer rounded-sm border bg-transparent font-sans font-semibold tracking-[0.07em] transition-[opacity,transform] duration-180 hover:-translate-y-px hover:opacity-78";
 
 type MemberFieldsProps = {
   fieldId: string;
@@ -74,21 +70,43 @@ function MemberFields({ fieldId, name, who, member, onChange }: MemberFieldsProp
           value={member.name}
         />
       </div>
-      <div className={FIELD}>
-        <label className="sr-only" htmlFor={`${fieldId}-email`}>
-          {who} email
-        </label>
-        <input
-          autoComplete="email"
-          className={CONTROL}
-          id={`${fieldId}-email`}
-          name={`${name}[email]`}
-          onChange={(event) => onChange("email", event.target.value)}
-          placeholder="Email address"
-          required
-          type="email"
-          value={member.email}
-        />
+      <div className="grid min-w-0 grid-cols-2 gap-[0.7rem] max-[420px]:grid-cols-1">
+        <div className={FIELD}>
+          <label className="sr-only" htmlFor={`${fieldId}-whatsapp`}>
+            {who} WhatsApp number
+          </label>
+          <input
+            autoComplete="tel"
+            className={CONTROL}
+            id={`${fieldId}-whatsapp`}
+            inputMode="numeric"
+            maxLength={10}
+            name={`${name}[whatsapp]`}
+            // Digits only, so the value can only ever take the 0771234567 shape.
+            onChange={(event) => onChange("whatsapp", event.target.value.replace(/\D/g, ""))}
+            pattern="0[0-9]{9}"
+            placeholder="WhatsApp (07XXXXXXXX)"
+            required
+            title="10 digits starting with 0, e.g. 0771234567"
+            type="tel"
+            value={member.whatsapp}
+          />
+        </div>
+        <div className={FIELD}>
+          <span className="sr-only" id={`${fieldId}-year-label`}>
+            {who} year of study
+          </span>
+          <CustomSelect
+            id={`${fieldId}-year`}
+            labelId={`${fieldId}-year-label`}
+            name={`${name}[year]`}
+            onChange={(value) => onChange("year", value)}
+            options={YEAR_OPTIONS}
+            placeholder="Year"
+            required
+            value={member.year}
+          />
+        </div>
       </div>
       <div className="grid min-w-0 grid-cols-2 gap-[0.7rem] max-[420px]:grid-cols-1">
         <div className={FIELD}>
@@ -108,18 +126,19 @@ function MemberFields({ fieldId, name, who, member, onChange }: MemberFieldsProp
           />
         </div>
         <div className={FIELD}>
-          <span className="sr-only" id={`${fieldId}-year-label`}>
-            {who} year of study
-          </span>
-          <CustomSelect
-            id={`${fieldId}-year`}
-            labelId={`${fieldId}-year-label`}
-            name={`${name}[year]`}
-            onChange={(value) => onChange("year", value)}
-            options={YEARS}
-            placeholder="Year"
-            required
-            value={member.year}
+          <label className="sr-only" htmlFor={`${fieldId}-ieee`}>
+            {who} IEEE membership number (optional)
+          </label>
+          <input
+            autoComplete="off"
+            className={CONTROL}
+            id={`${fieldId}-ieee`}
+            inputMode="numeric"
+            maxLength={12}
+            name={`${name}[ieeeMembership]`}
+            onChange={(event) => onChange("ieeeMembership", event.target.value)}
+            placeholder="IEEE no. (optional)"
+            value={member.ieeeMembership}
           />
         </div>
       </div>
@@ -127,13 +146,22 @@ function MemberFields({ fieldId, name, who, member, onChange }: MemberFieldsProp
   );
 }
 
-export default function RegistrationForm({ onSubmit }: RegistrationFormProps) {
+export default function RegistrationForm({ isOpen }: RegistrationFormProps) {
   const id = useId();
-  const [teamLead, setTeamLead] = useState<Member>(blankMember);
+  const [teamName, setTeamName] = useState("");
+  const [leader, setLeader] = useState<Member>(blankMember);
+  // Everyone except the leader; its length is always teamSize - 1.
   const [members, setMembers] = useState<Member[]>([]);
-  const [status, setStatus] = useState("");
-  const [isError, setIsError] = useState(false);
+  const [result, setResult] = useState<RegistrationResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const teamSize = members.length + 1;
+
+  function changeTeamSize(value: string) {
+    const otherMembers = Number(value) - 1;
+    setMembers((current) =>
+      Array.from({ length: otherMembers }, (_, index) => current[index] ?? blankMember()),
+    );
+  }
 
   function updateMember(index: number, field: keyof Member, value: string) {
     setMembers((current) =>
@@ -145,40 +173,47 @@ export default function RegistrationForm({ onSubmit }: RegistrationFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatus("");
-    setIsError(false);
 
-    if ([teamLead, ...members].some((member) => !member.year)) {
-      setStatus("Choose a year of study for every member before continuing.");
-      setIsError(true);
+    if ([leader, ...members].some((member) => !member.year)) {
+      setResult({
+        kind: "error",
+        message: "Choose a year of study for every member, then try again.",
+      });
       return;
     }
 
-    if (!onSubmit) {
-      setStatus(
-        "Your registration has not been sent. Connect an onSubmit handler to your registration endpoint.",
-      );
-      return;
-    }
-
-    const formData = new FormData(event.currentTarget);
-    const submission: RegistrationSubmission = {
-      teamName: String(formData.get("teamName") ?? ""),
-      teamLead,
-      members,
-    };
+    const submission: RegistrationSubmission = { teamName, teamSize, leader, members };
 
     setIsSubmitting(true);
     try {
-      await onSubmit(submission);
-      setStatus("Your team has been registered.");
-    } catch (error) {
-      setIsError(true);
-      setStatus(
-        error instanceof Error
-          ? `Submission failed: ${error.message}`
-          : "Submission failed. Please try again.",
-      );
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(submission),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        teamId?: string;
+      };
+      if (!response.ok || !body.ok) {
+        setResult({
+          kind: "error",
+          message: body.error ?? "Something went wrong on our side. Please try again.",
+        });
+        return;
+      }
+
+      setResult({ kind: "success", teamId: body.teamId ?? "", teamName, teamSize });
+      setTeamName("");
+      setLeader(blankMember());
+      setMembers([]);
+    } catch {
+      setResult({
+        kind: "error",
+        message:
+          "The connection could not be established. Check your internet connection and try again.",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -201,128 +236,114 @@ export default function RegistrationForm({ onSubmit }: RegistrationFormProps) {
       />
 
       <div className="relative mx-auto w-full max-w-[520px] min-w-0 rounded-lg border border-line bg-panel shadow-[0_20px_55px_rgb(0_0_0/0.3),inset_0_1px_rgb(245_250_247/0.035)] backdrop-blur-md">
-        
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-lg bg-bg/40 backdrop-blur-[3px]">
-          <div className="mx-4 flex flex-col items-center justify-center rounded-xl border border-mint/30 bg-panel/90 p-8 shadow-[0_0_40px_rgb(140_245_189/0.15)] backdrop-blur-md text-center">
-            <h3 className="font-display text-xl font-bold tracking-[0.1em] text-white md:text-2xl">
-              REGISTRATIONS
-            </h3>
-            <p className="mt-1 font-display text-2xl font-bold tracking-[0.05em] text-mint text-glow md:text-3xl">
-              COMING SOON
-            </p>
-            <p className="mt-4 text-sm leading-relaxed text-muted">
-              Assemble your team. The chasm opens shortly.
-            </p>
-          </div>
-        </div>
 
-        <div className="p-[clamp(1rem,5vw,1.6rem)] max-[420px]:p-[0.9rem] opacity-25 pointer-events-none select-none grayscale-[0.5]">
+        {!isOpen && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-lg bg-bg/40 backdrop-blur-[3px]">
+            <div className="mx-4 flex flex-col items-center justify-center rounded-xl border border-mint/30 bg-panel/90 p-8 shadow-[0_0_40px_rgb(140_245_189/0.15)] backdrop-blur-md text-center">
+              <h3 className="font-display text-xl font-bold tracking-[0.1em] text-white md:text-2xl">
+                REGISTRATIONS
+              </h3>
+              <p className="mt-1 font-display text-2xl font-bold tracking-[0.05em] text-mint text-glow md:text-3xl">
+                COMING SOON
+              </p>
+              <p className="mt-4 text-sm leading-relaxed text-muted">
+                Assemble your team. The chasm opens shortly.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div
+          className={cx(
+            "p-[clamp(1rem,5vw,1.6rem)] max-[420px]:p-[0.9rem]",
+            !isOpen && "pointer-events-none opacity-25 grayscale-[0.5] select-none",
+          )}
+          inert={!isOpen}
+        >
           <form className="grid min-w-0 gap-[1.15rem]" onSubmit={handleSubmit}>
-          <div className={FIELD}>
-            <label className={LABEL} htmlFor={`${id}-team-name`}>
-              TEAM NAME <span className={HINT}>(INPUT)</span>
-            </label>
-            <input
-              autoComplete="organization"
-              className={CONTROL}
-              id={`${id}-team-name`}
-              maxLength={80}
-              name="teamName"
-              placeholder="Enter your team name"
-              required
-            />
-          </div>
-
-          <fieldset className={GROUP}>
-            <legend className={LEGEND}>
-              MEMBERS <span className={HINT}>(INPUT)</span>
-            </legend>
-
-            <div className={CARD}>
-              <p className={CARD_HEADING}>TEAM LEAD</p>
-              <MemberFields
-                fieldId={`${id}-lead`}
-                member={teamLead}
-                name="teamLead"
-                onChange={(field, value) =>
-                  setTeamLead((current) => ({ ...current, [field]: value }))
-                }
-                who="Team lead"
+            <div className={FIELD}>
+              <label className={LABEL} htmlFor={`${id}-team-name`}>
+                TEAM NAME <span className={HINT}>(INPUT)</span>
+              </label>
+              <input
+                autoComplete="organization"
+                className={CONTROL}
+                id={`${id}-team-name`}
+                maxLength={80}
+                name="teamName"
+                onChange={(event) => setTeamName(event.target.value)}
+                placeholder="Enter your team name"
+                required
+                value={teamName}
               />
             </div>
 
-            {members.map((member, index) => {
-              const memberId = `${id}-member-${index + 1}`;
+            <div className={FIELD}>
+              <span className={LABEL} id={`${id}-team-size-label`}>
+                NUMBER OF MEMBERS{" "}
+                <span className={HINT}>(MAX {MAX_TEAM_SIZE}, INCLUDING LEADER)</span>
+              </span>
+              <CustomSelect
+                id={`${id}-team-size`}
+                labelId={`${id}-team-size-label`}
+                name="teamSize"
+                onChange={changeTeamSize}
+                options={TEAM_SIZE_OPTIONS}
+                required
+                value={String(teamSize)}
+              />
+            </div>
 
-              return (
-                <div className={CARD} key={memberId}>
-                  <div className="flex items-center justify-between gap-2">
+            <fieldset className={GROUP}>
+              <legend className={LEGEND}>
+                MEMBERS <span className={HINT}>(INPUT)</span>
+              </legend>
+
+              <div className={CARD}>
+                <p className={CARD_HEADING}>TEAM LEADER</p>
+                <MemberFields
+                  fieldId={`${id}-leader`}
+                  member={leader}
+                  name="leader"
+                  onChange={(field, value) =>
+                    setLeader((current) => ({ ...current, [field]: value }))
+                  }
+                  who="Team leader"
+                />
+              </div>
+
+              {members.map((member, index) => {
+                const memberId = `${id}-member-${index + 2}`;
+
+                return (
+                  <div className={CARD} key={memberId}>
                     <p className={CARD_HEADING}>
-                      TEAM MEMBER {String(index + 1).padStart(2, "0")}
+                      TEAM MEMBER {String(index + 2).padStart(2, "0")}
                     </p>
-                    <button
-                      aria-label={`Remove team member ${index + 1}`}
-                      className={cx(
-                        SMALL_BUTTON,
-                        "min-h-[1.8rem] border-muted/28 px-2 py-[0.3rem] text-[0.6rem] text-muted",
-                      )}
-                      onClick={() =>
-                        setMembers((current) =>
-                          current.filter((_, currentIndex) => currentIndex !== index),
-                        )
-                      }
-                      type="button"
-                    >
-                      REMOVE
-                    </button>
+                    <MemberFields
+                      fieldId={memberId}
+                      member={member}
+                      name={`members[${index}]`}
+                      onChange={(field, value) => updateMember(index, field, value)}
+                      who={`Team member ${index + 2}`}
+                    />
                   </div>
-                  <MemberFields
-                    fieldId={memberId}
-                    member={member}
-                    name={`members[${index}]`}
-                    onChange={(field, value) => updateMember(index, field, value)}
-                    who={`Team member ${index + 1}`}
-                  />
-                </div>
-              );
-            })}
+                );
+              })}
+            </fieldset>
 
             <button
-              className={cx(
-                SMALL_BUTTON,
-                "min-h-9 justify-self-start border-mint/40 px-[0.7rem] py-[0.45rem] text-[0.68rem] text-mint",
-              )}
-              onClick={() => setMembers((current) => [...current, blankMember()])}
-              type="button"
+              className="btn-primary h-auto min-h-13 w-full px-4 text-[clamp(0.68rem,3vw,0.8rem)] tracking-[0.06em] disabled:cursor-wait disabled:opacity-65"
+              disabled={isSubmitting}
+              type="submit"
             >
-              <span aria-hidden="true" className="pr-1 text-base">
-                +
-              </span>{" "}
-              ADD TEAM MEMBER
+              {isSubmitting ? "CONSTRUCTING BRIDGE..." : "CONNECT & REGISTER"}
             </button>
-          </fieldset>
-
-          <button
-            className="btn-primary h-auto min-h-13 w-full px-4 text-[clamp(0.68rem,3vw,0.8rem)] tracking-[0.06em] disabled:cursor-wait disabled:opacity-65"
-            disabled={isSubmitting}
-            type="submit"
-          >
-            {isSubmitting ? "SUBMITTING..." : "CONNECT & REGISTER"}
-          </button>
-
-          <p
-            aria-live="polite"
-            className={cx(
-              "-mt-[0.6rem] min-h-[1.2em] text-center text-[0.78rem] leading-normal",
-              isError ? "text-[#ffb4a8]" : "text-mint",
-            )}
-            role={isError ? "alert" : "status"}
-          >
-            {status}
-          </p>
-        </form>
+          </form>
         </div>
       </div>
+
+      <RegistrationDialog onClose={() => setResult(null)} result={result} />
     </motion.section>
   );
 }
