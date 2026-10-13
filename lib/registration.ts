@@ -30,8 +30,42 @@ export const blankMember = (): Member => ({
 });
 
 // Local format only: 10 digits starting with 0, e.g. 0771234567.
-const WHATSAPP_PATTERN = /^0\d{9}$/;
-const IEEE_PATTERN = /^\d{6,12}$/;
+export const WHATSAPP_PATTERN = /^0\d{9}$/;
+// Letters, digits and slashes, e.g. 2022cs001 or EG/2022/1234.
+export const REG_NUMBER_PATTERN = /^[A-Za-z0-9/]+$/;
+// e.g. 101597523.
+export const IEEE_PATTERN = /^\d{6,12}$/;
+
+// Returns the first problem with a member's details, or null if they're valid.
+// Messages are written to be shown to the user as-is.
+export function memberError(member: Member): string | null {
+  if (!member.name.trim()) return "Enter a full name.";
+  if (!YEARS.includes(member.year as (typeof YEARS)[number])) return "Choose a year of study.";
+  if (!WHATSAPP_PATTERN.test(member.whatsapp))
+    return "WhatsApp number must be 10 digits, like 0771234567.";
+  if (!REG_NUMBER_PATTERN.test(member.registrationNumber.trim()))
+    return "Registration number can only contain letters, numbers and /, like 2022cs001.";
+  if (member.ieeeMembership && !IEEE_PATTERN.test(member.ieeeMembership))
+    return "IEEE membership number should be digits only, like 101597523.";
+  return null;
+}
+
+export function teamError(teamName: string, teamSize: number): string | null {
+  if (!teamName.trim()) return "Enter a team name.";
+  if (!Number.isInteger(teamSize) || teamSize < MIN_TEAM_SIZE || teamSize > MAX_TEAM_SIZE)
+    return `Teams must have ${MIN_TEAM_SIZE}–${MAX_TEAM_SIZE} members.`;
+  return null;
+}
+
+// Registration numbers compare case-insensitively: 2022cs001 is 2022CS001.
+export const normalizeRegNumber = (value: string) => value.trim().toUpperCase();
+
+export function duplicateRegNumberError(people: Member[]): string | null {
+  const regNumbers = people.map((member) => normalizeRegNumber(member.registrationNumber));
+  return new Set(regNumbers).size === regNumbers.length
+    ? null
+    : "Each member must have a different registration number.";
+}
 
 const text = (value: unknown, max: number) =>
   typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -42,19 +76,12 @@ function cleanMember(raw: unknown, who: string): Member {
     name: text(input.name, 100),
     year: text(input.year, 1),
     whatsapp: text(input.whatsapp, 20),
-    registrationNumber: text(input.registrationNumber, 40).toUpperCase(),
+    registrationNumber: normalizeRegNumber(text(input.registrationNumber, 40)),
     ieeeMembership: text(input.ieeeMembership, 20),
   };
 
-  if (!member.name) throw new Error(`${who}: name is required.`);
-  if (!YEARS.includes(member.year as (typeof YEARS)[number]))
-    throw new Error(`${who}: choose a year of study.`);
-  if (!WHATSAPP_PATTERN.test(member.whatsapp))
-    throw new Error(`${who}: WhatsApp number must be 10 digits, like 0771234567.`);
-  if (!member.registrationNumber) throw new Error(`${who}: registration number is required.`);
-  if (member.ieeeMembership && !IEEE_PATTERN.test(member.ieeeMembership))
-    throw new Error(`${who}: IEEE membership number should contain only digits.`);
-
+  const error = memberError(member);
+  if (error) throw new Error(`${who}: ${error}`);
   return member;
 }
 
@@ -66,18 +93,16 @@ export function parseSubmission(raw: unknown): RegistrationSubmission {
   const teamSize = Number(input.teamSize);
   const rawMembers = Array.isArray(input.members) ? input.members : [];
 
-  if (!teamName) throw new Error("Team name is required.");
-  if (!Number.isInteger(teamSize) || teamSize < MIN_TEAM_SIZE || teamSize > MAX_TEAM_SIZE)
-    throw new Error(`Teams must have ${MIN_TEAM_SIZE}–${MAX_TEAM_SIZE} members.`);
+  const error = teamError(teamName, teamSize);
+  if (error) throw new Error(error);
   if (rawMembers.length !== teamSize - 1)
     throw new Error("Member details do not match the team size.");
 
   const leader = cleanMember(input.leader, "Team leader");
   const members = rawMembers.map((member, index) => cleanMember(member, `Member ${index + 2}`));
 
-  const regNumbers = [leader, ...members].map((member) => member.registrationNumber);
-  if (new Set(regNumbers).size !== regNumbers.length)
-    throw new Error("Each member must have a different registration number.");
+  const duplicate = duplicateRegNumberError([leader, ...members]);
+  if (duplicate) throw new Error(duplicate);
 
   return { teamName, teamSize, leader, members };
 }

@@ -25,8 +25,15 @@ one row per team and 24 columns:
 | T–X | Member 4 … | blank if team size < 4 |
 
 Every cell is stored as plain text, so leading zeros in phone numbers are kept and
-values starting with `=` or `+` are never run as formulas. Registration numbers are
-uppercased, and a registration number can appear in only one team.
+values starting with `=` or `+` are never run as formulas.
+
+Field formats (checked in the form, the API route and `lib/registration.ts`):
+
+| Field | Format | Example |
+|-------|--------|---------|
+| WhatsApp | exactly 10 digits, starting with 0 | `0771234567` |
+| Registration number | letters, digits and `/`; stored uppercased; unique across all teams | `2022cs001` → `2022CS001` |
+| IEEE membership number | optional, 6–12 digits | `101597523` |
 
 ## 2. Create the sheet and script
 
