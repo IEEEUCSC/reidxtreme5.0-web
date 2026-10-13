@@ -1,7 +1,7 @@
 // Shared by the registration form and the /api/register route handler.
 
-export const MIN_TEAM_SIZE = 1;
-export const MAX_TEAM_SIZE = 4;
+export const MIN_TEAM_SIZE = 2;
+export const MAX_TEAM_SIZE = 3;
 
 export const YEARS = ["1", "2", "3", "4"] as const;
 

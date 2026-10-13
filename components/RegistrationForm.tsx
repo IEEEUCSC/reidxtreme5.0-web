@@ -12,6 +12,7 @@ import {
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import CustomSelect from "@/components/CustomSelect";
 import RegistrationDialog, { type RegistrationResult } from "@/components/RegistrationDialog";
+import { TransitionOverlay } from "@/components/TransitionOverlay";
 import { useHydrated } from "@/hooks/useHydrated";
 import { cx } from "@/lib/cx";
 import {
@@ -564,6 +565,34 @@ function SlideDown({ children }: { children: ReactNode }) {
   );
 }
 
+// Logo assembly in public/transition/transition.webm takes about two seconds.
+const MIN_TRANSITION_MS = 2200;
+
+// Sends the registration and turns every outcome into a dialog message.
+async function postRegistration(submission: RegistrationSubmission): Promise<RegistrationResult> {
+  try {
+    const response = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submission),
+    });
+    const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!response.ok || !body.ok) {
+      return {
+        kind: "error",
+        message: body.error ?? "Something went wrong on our side. Please try again.",
+      };
+    }
+    return { kind: "success", teamName: submission.teamName, teamSize: submission.teamSize };
+  } catch {
+    return {
+      kind: "error",
+      message:
+        "The connection could not be established. Check your internet connection and try again.",
+    };
+  }
+}
+
 function RegistrationWizard({ isOpen, headingId }: RegistrationFormProps & { headingId: string }) {
   const id = useId();
   // Rendered only after hydration, so reading localStorage here is safe.
@@ -682,33 +711,19 @@ function RegistrationWizard({ isOpen, headingId }: RegistrationFormProps & { hea
     const submission: RegistrationSubmission = { teamName, teamSize, leader, members };
 
     setIsSubmitting(true);
-    try {
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submission),
-      });
-      const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!response.ok || !body.ok) {
-        setResult({
-          kind: "error",
-          message: body.error ?? "Something went wrong on our side. Please try again.",
-        });
-        return;
-      }
+    // Keep the transition up long enough for the logo to assemble, even when
+    // the request is quick; a slow request holds on the finished logo.
+    const [outcome] = await Promise.all([
+      postRegistration(submission),
+      new Promise((resolve) => setTimeout(resolve, MIN_TRANSITION_MS)),
+    ]);
+    setIsSubmitting(false);
+    setResult(outcome);
 
-      setResult({ kind: "success", teamName, teamSize });
+    if (outcome.kind === "success") {
       resetForm();
       // The success dialog holds focus; don't pull it to the form behind.
       focusNextHeading.current = false;
-    } catch {
-      setResult({
-        kind: "error",
-        message:
-          "The connection could not be established. Check your internet connection and try again.",
-      });
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
@@ -1077,6 +1092,7 @@ function RegistrationWizard({ isOpen, headingId }: RegistrationFormProps & { hea
   return (
     <MotionConfig reducedMotion="user">
       <RegistrationLayout aside={aside} headingId={headingId} isOpen={isOpen} panel={panel} />
+      <TransitionOverlay label="Constructing bridge..." show={isSubmitting} variant="submit" />
       <RegistrationDialog onClose={() => setResult(null)} result={result} />
     </MotionConfig>
   );
