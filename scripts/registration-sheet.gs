@@ -8,7 +8,8 @@
  *   { secret, teamName, teamSize, leader: Member, members: Member[] }
  *   Member = { name, year, email, whatsapp, registrationNumber, ieeeMembership }
  *
- * After a team is saved, the leader is emailed the welcome message.
+ * After a team is saved, the leader gets the leaders' welcome email and every
+ * other member gets the members' welcome email.
  */
 
 const SHEET_NAME = 'Registrations';
@@ -24,7 +25,11 @@ const MEMBER_FIELDS = [
 ];
 const REG_FIELD_INDEX = MEMBER_FIELDS.findIndex(([, key]) => key === 'registrationNumber');
 
-const WHATSAPP_GROUP_URL = 'https://chat.whatsapp.com/DF2IqOjy4OfFW4SZfcN5JC?s=cl&p=i&mlu=0';
+const LEADERS_WHATSAPP_URL = 'https://chat.whatsapp.com/KegoGnuW8DLJJBeFU96OPF?s=cl&p=i&mlu=0';
+const MEMBERS_WHATSAPP_URL = 'https://chat.whatsapp.com/DF2IqOjy4OfFW4SZfcN5JC?s=cl&p=i&mlu=0';
+// Drive file ID of the delegate booklet PDF, attached to every welcome email.
+// Leave empty to send without it; the booklet paragraph is then left out too.
+const DELEGATE_BOOKLET_FILE_ID = '';
 const MAIL_SENDER_NAME = 'ReidXtreme 5.0';
 const MAIL_SUBJECT = 'Welcome to ReidXtreme 5.0!';
 // Hero banner, shared publicly on Drive. lh3.googleusercontent.com serves the
@@ -151,11 +156,14 @@ function doPost(e) {
 
   // The team is saved at this point, so a mail failure must not fail the
   // registration. Failures show up under Apps Script → Executions.
-  try {
-    sendWelcomeEmail(data.leader, teamName);
-  } catch (err) {
-    console.error('Welcome email to ' + data.leader.email + ' failed: ' + err);
-  }
+  const booklet = getBooklet();
+  people.forEach((person, i) => {
+    try {
+      sendWelcomeEmail(i === 0 ? 'leader' : 'member', person, teamName, booklet);
+    } catch (err) {
+      console.error('Welcome email to ' + person.email + ' failed: ' + err);
+    }
+  });
 
   return json({ ok: true, teamId: teamId });
 }
@@ -171,39 +179,96 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function sendWelcomeEmail(leader, teamName) {
-  MailApp.sendEmail(leader.email, MAIL_SUBJECT, buildWelcomeText(teamName), {
+// Copy for each email. Both share one layout; only the wording and the
+// WhatsApp group differ.
+const WELCOME_EMAILS = {
+  leader: {
+    greeting: 'Dear Team Leader,',
+    congrats: 'Your team has successfully registered for ReidXtreme 5.0!',
+    intro: 'Get ready to lead your team through an exciting competitive programming challenge.',
+    groupTitle: 'Join the official Team Leaders’ WhatsApp group',
+    groupText:
+      'All team leaders are required to join this group for important announcements, ' +
+      'selection round updates, and competition instructions.',
+    groupUrl: LEADERS_WHATSAPP_URL,
+    bookletText:
+      'Please review it carefully and ensure your team is familiar with the competition guidelines.',
+    closing: ['The challenge is set.', 'Let your ascent begin!'],
+    preheader: 'is registered. Join the Team Leaders’ WhatsApp group for updates.',
+    footer: 'You’re receiving this because you registered a team for ReidXtreme 5.0 as its leader.',
+  },
+  member: {
+    greeting: 'Dear Participant,',
+    congrats: 'You’re officially part of ReidXtreme 5.0!',
+    intro:
+      'Get ready to challenge your limits, sharpen your problem-solving skills, and take your ' +
+      'competitive programming journey to the next level!',
+    groupTitle: 'Join the official Team Members’ WhatsApp group',
+    groupText:
+      'All team members are required to join this group to stay updated on selection round ' +
+      'announcements, schedules, and important instructions.',
+    groupUrl: MEMBERS_WHATSAPP_URL,
+    bookletText:
+      'Please go through it carefully to familiarize yourself with the competition guidelines.',
+    closing: null,
+    preheader: 'is registered. Join the Team Members’ WhatsApp group for updates.',
+    footer: 'You’re receiving this because your team leader registered you for ReidXtreme 5.0.',
+  },
+};
+
+// The delegate booklet as a mail attachment, or null when none is configured.
+function getBooklet() {
+  if (!DELEGATE_BOOKLET_FILE_ID) return null;
+  return DriveApp.getFileById(DELEGATE_BOOKLET_FILE_ID).getBlob();
+}
+
+// role is 'leader' or 'member'.
+function sendWelcomeEmail(role, person, teamName, booklet) {
+  const content = WELCOME_EMAILS[role];
+  const options = {
     name: MAIL_SENDER_NAME,
-    htmlBody: buildWelcomeHtml(teamName),
-  });
+    htmlBody: buildWelcomeHtml(content, teamName, Boolean(booklet)),
+  };
+  if (booklet) options.attachments = [booklet];
+  MailApp.sendEmail(
+    person.email,
+    MAIL_SUBJECT,
+    buildWelcomeText(content, teamName, Boolean(booklet)),
+    options,
+  );
 }
 
 // Plain-text fallback for clients that don't render HTML.
-function buildWelcomeText(teamName) {
-  return [
+function buildWelcomeText(content, teamName, hasBooklet) {
+  const lines = [
     'WELCOME TO REIDXTREME 5.0!',
     '',
     'Team: ' + teamName,
     '',
-    'Dear Participants,',
+    content.greeting,
     '',
-    'Congratulations! Your team has successfully registered for ReidXtreme 5.0!',
+    'Congratulations! ' + content.congrats,
     '',
-    'Get ready to challenge your limits, sharpen your problem-solving skills, and take your ' +
-      'competitive programming journey to the next level as you prepare for IEEEXtreme 20.0!',
+    content.intro,
     '',
-    'JOIN OUR OFFICIAL WHATSAPP GROUP',
-    'All team members are required to join the official WhatsApp group to receive competition ' +
-      'updates, announcements, and important instructions.',
-    'Join here: ' + WHATSAPP_GROUP_URL,
+    content.groupTitle.toUpperCase(),
+    content.groupText,
+    'Join here: ' + content.groupUrl,
     '',
-    'The challenge awaits. Let your ascent begin!',
-    '',
+  ];
+  if (hasBooklet) {
+    lines.push(
+      'The official ReidXtreme 5.0 Delegate Booklet is attached. ' + content.bookletText,
+      '',
+    );
+  }
+  if (content.closing) lines.push(content.closing.join(' '), '');
+  lines.push(
     'Best regards,',
-    'Organizing Committee',
-    'ReidXtreme 5.0',
+    'ReidXtreme 5.0 Organizing Committee',
     'IEEE Student Branch of UCSC',
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 // Table layout and inline styles only, so it renders the same in Gmail,
@@ -211,7 +276,7 @@ function buildWelcomeText(teamName) {
 // glass panel, mint accents, condensed uppercase display type, and the home
 // page's 40px technical grid behind everything (clients that drop CSS
 // gradients just show the plain background).
-function buildWelcomeHtml(teamName) {
+function buildWelcomeHtml(content, teamName, hasBooklet) {
   const c = {
     bg: '#03080A',
     panel: '#07120F',
@@ -240,6 +305,24 @@ function buildWelcomeHtml(teamName) {
     'linear-gradient(rgba(140,245,189,0.05) 1px,transparent 1px),' +
     'linear-gradient(90deg,rgba(140,245,189,0.05) 1px,transparent 1px);' +
     'background-size:40px 40px;';
+  const groupUrl = content.groupUrl;
+
+  const bookletHtml = hasBooklet
+    ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px;">
+        <tr><td style="${section}">
+          <h2 style="${h2}">Official delegate booklet</h2>
+          <p style="${p}margin:0;">The official ReidXtreme 5.0 Delegate Booklet is <strong style="color:${c.white};">attached to this email</strong>. ${content.bookletText}</p>
+        </td></tr>
+      </table>`
+    : '';
+
+  const closingHtml = content.closing
+    ? `
+      <p style="${display}margin:0 0 32px;font-size:24px;line-height:1.15;font-weight:700;letter-spacing:0.04em;color:${c.white};">
+        ${content.closing[0]} <span style="color:${c.mint};">${content.closing[1]}</span>
+      </p>`
+    : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -252,7 +335,7 @@ function buildWelcomeHtml(teamName) {
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body style="margin:0;padding:0;background-color:${c.bg};">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your team ${escapeHtml(teamName)} is registered. Join the official WhatsApp group to stay updated.</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your team ${escapeHtml(teamName)} ${content.preheader}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${grid}">
 <tr><td align="center" style="padding:32px 16px;${grid}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
@@ -282,33 +365,29 @@ function buildWelcomeHtml(teamName) {
         </tr>
       </table>
 
-      <p style="${p}">Dear Participants,</p>
-      <p style="${p}"><strong style="color:${c.white};">Congratulations!</strong> Your team has successfully registered for ReidXtreme 5.0!</p>
-      <p style="${p}margin-bottom:28px;">Get ready to challenge your limits, sharpen your problem-solving skills, and take your competitive programming journey to the next level as you prepare for <strong style="color:${c.mint};">IEEEXtreme 20.0</strong>!</p>
+      <p style="${p}">${content.greeting}</p>
+      <p style="${p}"><strong style="color:${c.white};">Congratulations!</strong> ${content.congrats}</p>
+      <p style="${p}margin-bottom:28px;">${content.intro}</p>
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px;">
         <tr><td style="${section}">
-          <h2 style="${h2}">Join our official WhatsApp group</h2>
-          <p style="${p}margin-bottom:20px;">All team members are required to join the official WhatsApp group to receive competition updates, announcements, and important instructions.</p>
+          <h2 style="${h2}">${content.groupTitle}</h2>
+          <p style="${p}margin-bottom:20px;">${content.groupText}</p>
           <table role="presentation" cellpadding="0" cellspacing="0" border="0">
             <tr><td style="border-radius:6px;background-color:${c.mint};box-shadow:0 0 22px rgba(140,245,189,0.35);">
-              <a href="${WHATSAPP_GROUP_URL}" target="_blank" style="${display}display:inline-block;padding:12px 26px;font-size:16px;font-weight:700;letter-spacing:0.08em;color:${c.bg};text-decoration:none;">Join the group &rarr;</a>
+              <a href="${groupUrl}" target="_blank" style="${display}display:inline-block;padding:12px 26px;font-size:16px;font-weight:700;letter-spacing:0.08em;color:${c.bg};text-decoration:none;">Join the group &rarr;</a>
             </td></tr>
           </table>
-          <p style="${sans}margin:14px 0 0;font-size:12px;line-height:1.5;color:${c.muted};word-break:break-all;">Or open: <a href="${WHATSAPP_GROUP_URL}" style="color:${c.mint};">${WHATSAPP_GROUP_URL}</a></p>
+          <p style="${sans}margin:14px 0 0;font-size:12px;line-height:1.5;color:${c.muted};word-break:break-all;">Or open: <a href="${groupUrl}" style="color:${c.mint};">${groupUrl}</a></p>
         </td></tr>
       </table>
-
-      <p style="${display}margin:0 0 32px;font-size:24px;line-height:1.15;font-weight:700;letter-spacing:0.04em;color:${c.white};">
-        The challenge awaits. <span style="color:${c.mint};">Let your ascent begin!</span>
-      </p>
+${bookletHtml}${closingHtml}
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr><td style="border-top:1px solid ${c.line};padding-top:22px;">
           <p style="${sans}margin:0 0 8px;font-size:14px;color:${c.muted};">Best regards,</p>
           <p style="${sans}margin:0;font-size:14px;line-height:1.6;color:${c.body};">
-            <strong style="color:${c.white};">Organizing Committee</strong><br>
-            ReidXtreme 5.0<br>
+            <strong style="color:${c.white};">ReidXtreme 5.0 Organizing Committee</strong><br>
             IEEE Student Branch of UCSC
           </p>
         </td></tr>
@@ -320,7 +399,7 @@ function buildWelcomeHtml(teamName) {
     </td></tr>
 
     <tr><td align="center" style="padding:20px 8px 0;">
-      <p style="${sans}margin:0;font-size:12px;line-height:1.5;color:${c.muted};">You're receiving this because you registered a team for ReidXtreme 5.0 as its leader.</p>
+      <p style="${sans}margin:0;font-size:12px;line-height:1.5;color:${c.muted};">${content.footer}</p>
     </td></tr>
 
   </table>
@@ -365,7 +444,10 @@ function migrateAddEmailColumns() {
   console.log('Email columns are in place.');
 }
 
-// Run from the editor to preview the welcome email in your own inbox.
+// Run from the editor to preview both welcome emails in your own inbox.
 function sendTestWelcomeEmail() {
-  sendWelcomeEmail({ email: Session.getActiveUser().getEmail() }, 'Test Team');
+  const me = { email: Session.getActiveUser().getEmail() };
+  const booklet = getBooklet();
+  sendWelcomeEmail('leader', me, 'Test Team', booklet);
+  sendWelcomeEmail('member', me, 'Test Team', booklet);
 }

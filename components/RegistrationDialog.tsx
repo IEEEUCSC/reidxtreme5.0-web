@@ -3,6 +3,9 @@
 import { useEffect, useId, useRef } from "react";
 import { cx } from "@/lib/cx";
 
+// Only the leader sees this link; members get theirs by email.
+const LEADERS_WHATSAPP_URL = "https://chat.whatsapp.com/KegoGnuW8DLJJBeFU96OPF?s=cl&p=i&mlu=0";
+
 export type RegistrationResult =
   | { kind: "success"; teamName: string; teamSize: number }
   | { kind: "error"; message: string };
@@ -89,14 +92,43 @@ export default function RegistrationDialog({ result, onClose }: RegistrationDial
                 <span className="font-semibold text-white">{result.teamName}</span> is on the
                 path. {result.teamSize === 1 ? "You're" : `All ${result.teamSize} members are`}{" "}
                 registered for ReidXtreme 5.0.
+                {result.teamSize > 1 &&
+                  " We've emailed every member a link to the official Team Members' WhatsApp group."}
               </>
             ) : (
               result.message
             )}
           </p>
 
+          {result.kind === "success" && (
+            <div className="grid w-full gap-3 rounded-md border border-mint/30 bg-bg/60 p-4 text-left">
+              <div className="grid gap-1">
+                <p className="text-[0.68rem] font-semibold tracking-[0.16em] text-mint uppercase">
+                  Team leader only
+                </p>
+                <p className="text-sm leading-relaxed text-body">
+                  Join the official Team Leaders&rsquo; WhatsApp group for announcements, selection
+                  round updates and competition instructions.
+                </p>
+              </div>
+              <a
+                className="btn-primary h-auto min-h-11 w-full text-[0.78rem] tracking-[0.06em]"
+                href={LEADERS_WHATSAPP_URL}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Join the leaders&rsquo; group
+              </a>
+            </div>
+          )}
+
           <button
-            className="btn-primary mt-1 h-auto min-h-12 w-full text-[0.78rem] tracking-[0.06em]"
+            className={cx(
+              "mt-1 h-auto min-h-12 w-full text-[0.78rem] tracking-[0.06em]",
+              isSuccess
+                ? "rounded-md border border-mint/45 font-bold text-mint uppercase transition-colors hover:bg-mint/10"
+                : "btn-primary",
+            )}
             onClick={onClose}
             ref={actionRef}
             type="button"
