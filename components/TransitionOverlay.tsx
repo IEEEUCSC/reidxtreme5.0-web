@@ -56,6 +56,8 @@ export function TransitionOverlay({ show, variant = "page", label }: TransitionO
             autoPlay
             className="h-full w-full object-contain"
             height={1080}
+            // A submission can outlast one play, so keep the logo moving until it settles.
+            loop={isSubmit}
             muted
             playsInline
             src="/transition/transition.webm"
