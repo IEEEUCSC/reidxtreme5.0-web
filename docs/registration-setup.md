@@ -2,7 +2,7 @@
 
 ```
 Browser form ──POST /api/register──▶ Next.js route (validates) ──POST + secret──▶ Apps Script web app ──▶ Google Sheet
-                                                                                           └──▶ welcome email to the team leader
+                                                                                           └──▶ welcome emails (leader + each member)
 ```
 
 The browser never sees the Apps Script URL or the secret. They live only in the
@@ -56,9 +56,12 @@ Field formats (checked in the form, the API route and `lib/registration.ts`):
 5. *(Optional)* Choose `setup` in the function dropdown and click **Run**. This
    creates the header row now. The first time, Google asks you to authorize the
    script: **Review permissions → choose account → Advanced → Go to (project) → Allow**.
-   It asks for Sheets, and Gmail (send) access.
-6. *(Optional)* Run `sendTestWelcomeEmail` to send the welcome email to your
-   own address and check how it looks.
+   It asks for Sheets, and Gmail (send) access (plus Drive, if a booklet is set).
+6. *(Optional)* To attach the delegate booklet, upload the PDF to Drive and put
+   its file ID in `DELEGATE_BOOKLET_FILE_ID` at the top of the script. Left
+   empty, the emails go out without the attachment or the booklet paragraph.
+7. *(Optional)* Run `sendTestWelcomeEmail` to send both welcome emails (leader
+   and member) to your own address and check how they look.
 
 ## 3. Deploy as a web app
 
@@ -96,7 +99,8 @@ so after changing `REGISTRATIONS_OPEN` you have to **redeploy** (or restart
 
 1. Run `pnpm dev`, open `/register`, and submit a test team.
 2. A new row should appear in the sheet, the form should show the Team ID, and the
-   leader's address should receive the welcome email.
+   leader should receive the leaders' welcome email and every other member the
+   members' one.
 3. Submit the same team name again. You should see *"That team name is already taken."*
 4. Delete the test rows before you announce registrations.
 
@@ -108,7 +112,7 @@ so after changing `REGISTRATIONS_OPEN` you have to **redeploy** (or restart
 | "Unauthorized." | `GOOGLE_SCRIPT_SECRET` doesn't match the `SECRET` script property |
 | "Could not save your registration." | The script crashed or the URL is wrong. Check **Apps Script → Executions** for the error. A common cause is that access isn't set to *Anyone* |
 | "Registrations are being updated." | The sheet's header row doesn't match the script. Run `migrateAddEmailColumns` |
-| Team saved but no welcome email | Check **Executions** for the mail error. Free Gmail accounts can send about 100 emails a day from Apps Script (Workspace: 1,500) |
+| Team saved but no welcome email | Check **Executions** for the mail error. Free Gmail accounts can send about 100 emails a day from Apps Script (Workspace: 1,500), and each team uses up to 3 |
 | Code changes have no effect | You didn't publish a new version of the deployment (see the note in step 3) |
 
 Team IDs come from the row number. If you delete rows in the middle of the sheet,
