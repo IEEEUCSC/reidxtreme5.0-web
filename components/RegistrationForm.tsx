@@ -471,6 +471,33 @@ function RegistrationLayout({ headingId, isOpen, aside, panel }: RegistrationLay
             Teams of up to {MAX_TEAM_SIZE}, leader included. Have everyone&apos;s email,
             registration and WhatsApp numbers ready. It takes about five minutes.
           </p>
+          <div
+            className={cx(
+              NOTICE,
+              "flex items-start gap-2.5 border-mint/30 bg-mint/6 text-left text-body",
+            )}
+            role="note"
+          >
+            <svg
+              aria-hidden="true"
+              className="mt-0.5 size-4 flex-none text-mint"
+              fill="none"
+              viewBox="0 0 16 16"
+            >
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M8 7v4M8 4.75v.5"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="1.6"
+              />
+            </svg>
+            <p className="m-0">
+              <span className="font-semibold text-mint">Please note:</span> Only{" "}
+              <span className="font-medium text-white">UCSC</span> (University of Colombo School of
+              Computing) undergraduates are eligible to participate.
+            </p>
+          </div>
         </header>
         {isOpen && aside}
       </aside>
